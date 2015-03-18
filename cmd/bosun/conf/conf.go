@@ -238,6 +238,7 @@ type Alert struct {
 	IgnoreUnknown    bool
 	Macros           []string `json:"-"`
 	UnjoinedOK       bool     `json:",omitempty"`
+	Log              bool
 	returnType       eparse.FuncType
 
 	crit, warn string
@@ -842,6 +843,8 @@ func (c *Conf) loadAlert(s *parse.SectionNode) {
 			a.UnjoinedOK = true
 		case "ignoreUnknown":
 			a.IgnoreUnknown = true
+		case "log":
+			a.Log = true
 		default:
 			c.errorf("unknown key %s", p.key)
 		}
@@ -873,6 +876,21 @@ func (c *Conf) loadAlert(s *parse.SectionNode) {
 			c.errorf("crit and warn expressions must return same type (%v != %v)", ret, wret)
 		} else if !tags.Equal(wtags) {
 			c.errorf("crit tags (%v) and warn tags (%v) must be equal", tags, wtags)
+		}
+	}
+	if a.Log {
+		for _, n := range a.CritNotification {
+			if n.Next != nil {
+				c.errorf("cannot use log with a chained notification")
+			}
+		}
+		for _, n := range a.WarnNotification {
+			if n.Next != nil {
+				c.errorf("cannot use log with a chained notification")
+			}
+		}
+		if a.CritNotification == nil && a.WarnNotification == nil {
+			c.errorf("log specified, but no notifications")
 		}
 	}
 	a.tags = tags

@@ -206,13 +206,6 @@ func TestCheckNotifyUnknown(t *testing.T) {
 	c, err := conf.New("", fmt.Sprintf(`
 		template t {
 			subject = {{.Name}}: {{.Group | len}} unknown alerts
-			body = `+"`"+`
-			<p>Time: {{.Time}}
-			<p>Name: {{.Name}}
-			<p>Alerts:
-			{{range .Group}}
-				<br>{{.}}
-			{{end}}`+"`"+`
 		}
 		unknownTemplate = t
 		notification n {
@@ -245,6 +238,68 @@ Loop:
 		select {
 		case r := <-nc:
 			if r == "a: 2 unknown alerts" {
+				gotExpected = true
+			} else {
+				t.Fatalf("unexpected: %v", r)
+			}
+		// TODO: remove this silly timeout-based test
+		case <-time.After(time.Second):
+			break Loop
+		}
+	}
+	if !gotExpected {
+		t.Errorf("didn't get expected result")
+	}
+}
+
+func TestCheckNotifyLog(t *testing.T) {
+	s := new(Schedule)
+	nc := make(chan string, 1)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := ioutil.ReadAll(r.Body)
+		nc <- string(b)
+	}))
+	defer ts.Close()
+	u, err := url.Parse(ts.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := conf.New("", fmt.Sprintf(`
+		template t {
+			subject = {{.Alert.Name}}
+		}
+		notification n {
+			post = http://%s/
+		}
+		alert a {
+			critNotification = n
+			crit = 1
+		}
+		alert b {
+			critNotification = n
+			crit = 1
+			log = true
+		}
+	`, u.Host))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.StateFile = ""
+	err = s.Init(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err := s.Check(nil, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.CheckNotifications()
+	gotExpected := false
+Loop:
+	for {
+		select {
+		case r := <-nc:
+			if r == "a" {
 				gotExpected = true
 			} else {
 				t.Fatalf("unexpected: %v", r)
