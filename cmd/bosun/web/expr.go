@@ -271,7 +271,7 @@ func Rule(t miniprofiler.Timer, w http.ResponseWriter, r *http.Request) (interfa
 		}
 	}
 	for _, v := range schedule.Conf.Notifications {
-		fmt.Fprintln(&buf, v.Def)
+		fmt.Fprintln(&buf, v.Text)
 	}
 	fmt.Fprintf(&buf, "%s\n", r.FormValue("template"))
 	fmt.Fprintf(&buf, "%s\n", r.FormValue("alert"))

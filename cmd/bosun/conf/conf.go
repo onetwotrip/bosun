@@ -784,7 +784,10 @@ func (c *Conf) loadAlert(s *parse.SectionNode) {
 			ns.Notifications[k] = v
 		}
 	}
-	pairs, _ := c.getPairs(s, a.Vars, sNormal) //TODO: add macros to deps
+	pairs, macros := c.getPairs(s, a.Vars, sNormal)
+	for _, m := range macros {
+		a.Dependencies = append(a.Dependencies, m)
+	}
 	for _, p := range pairs {
 		c.at(p.node)
 		v := p.val
@@ -868,8 +871,69 @@ func (c *Conf) loadAlert(s *parse.SectionNode) {
 		}
 	}
 	a.returnType = ret
+	c.findAllDependencies(&a)
 	c.Alerts[name] = &a
 	c.OrderedAlerts = append(c.OrderedAlerts, &a)
+}
+
+func (c *Conf) findAllDependencies(a *Alert) {
+	//Notifications and lookups are dependencies
+	var walkNotifications = func(n *Notifications) {
+		for _, l := range n.Lookups {
+			a.Dependencies = append(a.Dependencies, &l.ConfItem)
+		}
+		for _, not := range n.Notifications {
+			a.Dependencies = append(a.Dependencies, &not.ConfItem)
+		}
+	}
+	if a.CritNotification != nil {
+		walkNotifications(a.CritNotification)
+	}
+	if a.WarnNotification != nil {
+		walkNotifications(a.WarnNotification)
+	}
+	//expressions may contain lookups or alerts
+	var addIfUnique = func(ci *ConfItem) {
+		for _, x := range a.Dependencies {
+			if x == ci {
+				return
+			}
+		}
+		a.Dependencies = append(a.Dependencies, ci)
+	}
+	var walkExpr = func(n eparse.Node) {
+		eparse.Walk(n, func(n eparse.Node) {
+			switch n := n.(type) {
+			case *eparse.FuncNode:
+				//two things to look for in walking a tree.
+				//1. Lookup function
+				//2. Alert function
+				if n.Name == "lookup" && len(n.Args) > 0 {
+					name := n.Args[0].(*eparse.StringNode).Text
+					lookup := c.Lookups[name]
+					addIfUnique(&lookup.ConfItem)
+				} else if n.Name == "alert" && len(n.Args) > 0 {
+					name := n.Args[0].(*eparse.StringNode).Text
+					alert := c.Alerts[name]
+					addIfUnique(&alert.ConfItem)
+				}
+			}
+
+		})
+	}
+	if a.Crit != nil {
+		walkExpr(a.Crit.Tree.Root)
+	}
+	if a.Warn != nil {
+		walkExpr(a.Warn.Tree.Root)
+	}
+	if a.Depends != nil {
+		walkExpr(a.Depends.Tree.Root)
+	}
+	fmt.Println("AAAA", a.Name)
+	for _, dep := range a.Dependencies {
+		fmt.Println(dep)
+	}
 }
 
 func (c *Conf) loadNotification(s *parse.SectionNode) {
