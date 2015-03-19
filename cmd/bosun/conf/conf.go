@@ -225,9 +225,8 @@ type Entry struct {
 
 type Macro struct {
 	ConfItem
-	Pairs  []nodePair
-	Name   string
-	Macros []string
+	Pairs []nodePair
+	Name  string
 }
 
 type Alert struct {
@@ -243,8 +242,7 @@ type Alert struct {
 	WarnNotification *Notifications
 	Unknown          time.Duration
 	IgnoreUnknown    bool
-	Macros           []string `json:"-"`
-	UnjoinedOK       bool     `json:",omitempty"`
+	UnjoinedOK       bool `json:",omitempty"`
 	returnType       eparse.FuncType
 
 	template string
@@ -529,9 +527,8 @@ const (
 	sMacro
 )
 
-func (c *Conf) getPairs(s *parse.SectionNode, vars Vars, st sectionType, used *[]string) []nodePair {
+func (c *Conf) getPairs(s *parse.SectionNode, vars Vars, st sectionType) (pairs []nodePair, macrosUsed []*ConfItem) {
 	saw := make(map[string]bool)
-	var pairs []nodePair
 	ignoreBadExpand := st == sMacro
 	add := func(n parse.Node, k, v string) {
 		c.seen(k, saw)
@@ -559,9 +556,9 @@ func (c *Conf) getPairs(s *parse.SectionNode, vars Vars, st sectionType, used *[
 				if !ok {
 					c.errorf("macro not found: %s", v)
 				}
-				if used != nil {
-					*used = append(*used, v)
-				}
+
+				macrosUsed = append(macrosUsed, &m.ConfItem)
+
 				for _, p := range m.Pairs {
 					add(p.node, p.key, c.Expand(p.val, vars, ignoreBadExpand))
 				}
@@ -572,7 +569,7 @@ func (c *Conf) getPairs(s *parse.SectionNode, vars Vars, st sectionType, used *[
 			c.errorf("unexpected node")
 		}
 	}
-	return pairs
+	return
 }
 
 func (c *Conf) loadLookup(s *parse.SectionNode) {
@@ -648,11 +645,12 @@ func (c *Conf) loadMacro(s *parse.SectionNode) {
 		c.errorf("duplicate macro name: %s", name)
 	}
 	m := Macro{
-		Name:   name,
-		Macros: make([]string, 0),
+		Name: name,
 	}
 	m.Text = s.RawText
-	for _, p := range c.getPairs(s, nil, sMacro, &m.Macros) {
+	pairs, macros := c.getPairs(s, nil, sMacro)
+	m.Dependencies = macros
+	for _, p := range pairs {
 		m.Pairs = append(m.Pairs, p)
 	}
 	c.at(s)
@@ -749,7 +747,6 @@ func (c *Conf) loadAlert(s *parse.SectionNode) {
 	a := Alert{
 		Vars:             make(map[string]string),
 		Name:             name,
-		Macros:           make([]string, 0),
 		CritNotification: new(Notifications),
 		WarnNotification: new(Notifications),
 	}
@@ -787,7 +784,8 @@ func (c *Conf) loadAlert(s *parse.SectionNode) {
 			ns.Notifications[k] = v
 		}
 	}
-	for _, p := range c.getPairs(s, a.Vars, sNormal, &a.Macros) {
+	pairs, _ := c.getPairs(s, a.Vars, sNormal) //TODO: add macros to deps
+	for _, p := range pairs {
 		c.at(p.node)
 		v := p.val
 		switch p.key {
@@ -897,7 +895,8 @@ func (c *Conf) loadNotification(s *parse.SectionNode) {
 		},
 	}
 	c.Notifications[name] = &n
-	for _, p := range c.getPairs(s, n.Vars, sNormal, nil) {
+	pairs, _ := c.getPairs(s, n.Vars, sNormal)
+	for _, p := range pairs {
 		c.at(p.node)
 		v := p.val
 		switch k := p.key; k {
@@ -1097,64 +1096,64 @@ func (c *Conf) AlertTemplateStrings() (*AlertTemplateStrings, error) {
 	}
 	alerts := make(map[string]string)
 	t_associations := make(map[string]string)
-	for name, alert := range c.Alerts {
-		var add func([]string)
-		add = func(macros []string) {
-			for _, macro := range macros {
-				m := c.Macros[macro]
-				add(m.Macros)
-				alerts[name] += m.Text + "\n\n"
-			}
-		}
-		lookups := make(map[string]bool)
-		walk := func(n eparse.Node) {
-			eparse.Walk(n, func(n eparse.Node) {
-				switch n := n.(type) {
-				case *eparse.FuncNode:
-					if n.Name != "lookup" || len(n.Args) == 0 {
-						return
-					}
-					switch n := n.Args[0].(type) {
-					case *eparse.StringNode:
-						if lookups[n.Text] {
-							return
-						}
-						lookups[n.Text] = true
-						l := c.Lookups[n.Text]
-						if l == nil {
-							return
-						}
-						alerts[name] += l.Text + "\n\n"
-					}
-				}
-			})
-		}
-		walkNotifications := func(n *Notifications) {
-			for _, v := range n.Lookups {
-				if lookups[v.Name] {
-					return
-				}
-				lookups[v.Name] = true
-				alerts[name] += v.Text + "\n\n"
-			}
-		}
-		if alert.CritNotification != nil {
-			walkNotifications(alert.CritNotification)
-		}
-		if alert.WarnNotification != nil {
-			walkNotifications(alert.WarnNotification)
-		}
-		add(alert.Macros)
-		if alert.Crit != nil {
-			walk(alert.Crit.Tree.Root)
-		}
-		if alert.Warn != nil {
-			walk(alert.Warn.Tree.Root)
-		}
-		alerts[name] += alert.Text
-		if alert.Template != nil {
-			t_associations[alert.Name] = alert.Template.Name
-		}
+	for _, _ = range c.Alerts {
+		//		var add func([]string)
+		//		add = func(macros []string) {
+		//			for _, macro := range macros {
+		//				m := c.Macros[macro]
+		//				add(m.Macros)
+		//				alerts[name] += m.Text + "\n\n"
+		//			}
+		//		}
+		//		lookups := make(map[string]bool)
+		//		walk := func(n eparse.Node) {
+		//			eparse.Walk(n, func(n eparse.Node) {
+		//				switch n := n.(type) {
+		//				case *eparse.FuncNode:
+		//					if n.Name != "lookup" || len(n.Args) == 0 {
+		//						return
+		//					}
+		//					switch n := n.Args[0].(type) {
+		//					case *eparse.StringNode:
+		//						if lookups[n.Text] {
+		//							return
+		//						}
+		//						lookups[n.Text] = true
+		//						l := c.Lookups[n.Text]
+		//						if l == nil {
+		//							return
+		//						}
+		//						alerts[name] += l.Text + "\n\n"
+		//					}
+		//				}
+		//			})
+		//		}
+		//		walkNotifications := func(n *Notifications) {
+		//			for _, v := range n.Lookups {
+		//				if lookups[v.Name] {
+		//					return
+		//				}
+		//				lookups[v.Name] = true
+		//				alerts[name] += v.Text + "\n\n"
+		//			}
+		//		}
+		//		if alert.CritNotification != nil {
+		//			walkNotifications(alert.CritNotification)
+		//		}
+		//		if alert.WarnNotification != nil {
+		//			walkNotifications(alert.WarnNotification)
+		//		}
+		//		add(alert.Macros)
+		//		if alert.Crit != nil {
+		//			walk(alert.Crit.Tree.Root)
+		//		}
+		//		if alert.Warn != nil {
+		//			walk(alert.Warn.Tree.Root)
+		//		}
+		//		alerts[name] += alert.Text
+		//		if alert.Template != nil {
+		//			t_associations[alert.Name] = alert.Template.Name
+		//		}
 	}
 	return &AlertTemplateStrings{
 		templates,
