@@ -930,10 +930,39 @@ func (c *Conf) findAllDependencies(a *Alert) {
 	if a.Depends != nil {
 		walkExpr(a.Depends.Tree.Root)
 	}
-	fmt.Println("AAAA", a.Name)
-	for _, dep := range a.Dependencies {
-		fmt.Println(dep)
+
+}
+
+func (c *ConfItem) textWithDependencies() string {
+	deps := []*ConfItem{}
+	//recursively walk the tree, appending all other dependencies.
+	toCheck := []*ConfItem{}
+	for _, d := range c.Dependencies {
+		deps = append(deps, d)
+		toCheck = append(toCheck, d)
 	}
+	for len(toCheck) > 0 {
+		newSet := []*ConfItem{}
+		for _, dep := range toCheck {
+			for _, nextDep := range dep.Dependencies {
+				newSet = append(newSet, nextDep)
+				deps = append(deps, nextDep)
+			}
+		}
+		toCheck = newSet
+	}
+	text := ""
+	printed := map[*ConfItem]bool{}
+	//print dependencies right to left.
+	for i := len(deps) - 1; i >= 0; i-- {
+		fmt.Println(i, len(deps))
+		item := deps[i]
+		if !printed[item] {
+			printed[item] = true
+			text += item.Text + "\n\n"
+		}
+	}
+	return text + c.Text + "\n"
 }
 
 func (c *Conf) loadNotification(s *parse.SectionNode) {
@@ -1160,64 +1189,12 @@ func (c *Conf) AlertTemplateStrings() (*AlertTemplateStrings, error) {
 	}
 	alerts := make(map[string]string)
 	t_associations := make(map[string]string)
-	for _, _ = range c.Alerts {
-		//		var add func([]string)
-		//		add = func(macros []string) {
-		//			for _, macro := range macros {
-		//				m := c.Macros[macro]
-		//				add(m.Macros)
-		//				alerts[name] += m.Text + "\n\n"
-		//			}
-		//		}
-		//		lookups := make(map[string]bool)
-		//		walk := func(n eparse.Node) {
-		//			eparse.Walk(n, func(n eparse.Node) {
-		//				switch n := n.(type) {
-		//				case *eparse.FuncNode:
-		//					if n.Name != "lookup" || len(n.Args) == 0 {
-		//						return
-		//					}
-		//					switch n := n.Args[0].(type) {
-		//					case *eparse.StringNode:
-		//						if lookups[n.Text] {
-		//							return
-		//						}
-		//						lookups[n.Text] = true
-		//						l := c.Lookups[n.Text]
-		//						if l == nil {
-		//							return
-		//						}
-		//						alerts[name] += l.Text + "\n\n"
-		//					}
-		//				}
-		//			})
-		//		}
-		//		walkNotifications := func(n *Notifications) {
-		//			for _, v := range n.Lookups {
-		//				if lookups[v.Name] {
-		//					return
-		//				}
-		//				lookups[v.Name] = true
-		//				alerts[name] += v.Text + "\n\n"
-		//			}
-		//		}
-		//		if alert.CritNotification != nil {
-		//			walkNotifications(alert.CritNotification)
-		//		}
-		//		if alert.WarnNotification != nil {
-		//			walkNotifications(alert.WarnNotification)
-		//		}
-		//		add(alert.Macros)
-		//		if alert.Crit != nil {
-		//			walk(alert.Crit.Tree.Root)
-		//		}
-		//		if alert.Warn != nil {
-		//			walk(alert.Warn.Tree.Root)
-		//		}
-		//		alerts[name] += alert.Text
-		//		if alert.Template != nil {
-		//			t_associations[alert.Name] = alert.Template.Name
-		//		}
+	for name, alert := range c.Alerts {
+
+		alerts[name] += alert.textWithDependencies()
+		if alert.Template != nil {
+			t_associations[alert.Name] = alert.Template.Name
+		}
 	}
 	return &AlertTemplateStrings{
 		templates,
