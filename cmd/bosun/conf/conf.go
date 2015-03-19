@@ -195,8 +195,13 @@ func errRecover(errp *error) {
 	}
 }
 
+type ConfItem struct {
+	Text         string
+	Dependencies []*ConfItem
+}
+
 type Lookup struct {
-	Def     string
+	ConfItem
 	Name    string
 	Tags    []string
 	Entries []*Entry
@@ -219,14 +224,14 @@ type Entry struct {
 }
 
 type Macro struct {
-	Def    string
+	ConfItem
 	Pairs  []nodePair
 	Name   string
 	Macros []string
 }
 
 type Alert struct {
-	Def string
+	ConfItem
 	Vars
 	*Template        `json:"-"`
 	Name             string
@@ -292,7 +297,7 @@ func (c *Conf) parseNotifications(v string) (map[string]*Notification, error) {
 }
 
 type Template struct {
-	Def string
+	ConfItem
 	Vars
 	Name    string
 	Body    *htemplate.Template `json:"-"`
@@ -302,7 +307,7 @@ type Template struct {
 }
 
 type Notification struct {
-	Def string
+	ConfItem
 	Vars
 	Name      string
 	Email     []*mail.Address
@@ -576,9 +581,9 @@ func (c *Conf) loadLookup(s *parse.SectionNode) {
 		c.errorf("duplicate lookup name: %s", name)
 	}
 	l := Lookup{
-		Def:  s.RawText,
 		Name: name,
 	}
+	l.Text = s.RawText
 	var lookupTags opentsdb.TagSet
 	saw := make(map[string]bool)
 	for _, n := range s.Nodes.Nodes {
@@ -643,10 +648,10 @@ func (c *Conf) loadMacro(s *parse.SectionNode) {
 		c.errorf("duplicate macro name: %s", name)
 	}
 	m := Macro{
-		Def:    s.RawText,
 		Name:   name,
 		Macros: make([]string, 0),
 	}
+	m.Text = s.RawText
 	for _, p := range c.getPairs(s, nil, sMacro, &m.Macros) {
 		m.Pairs = append(m.Pairs, p)
 	}
@@ -683,10 +688,10 @@ func (c *Conf) loadTemplate(s *parse.SectionNode) {
 		c.errorf("duplicate template name: %s", name)
 	}
 	t := Template{
-		Def:  s.RawText,
 		Vars: make(map[string]string),
 		Name: name,
 	}
+	t.Text = s.RawText
 	funcs := ttemplate.FuncMap{
 		"V": func(v string) string {
 			return c.Expand(v, t.Vars, false)
@@ -742,13 +747,13 @@ func (c *Conf) loadAlert(s *parse.SectionNode) {
 		c.errorf("duplicate alert name: %s", name)
 	}
 	a := Alert{
-		Def:              s.RawText,
 		Vars:             make(map[string]string),
 		Name:             name,
 		Macros:           make([]string, 0),
 		CritNotification: new(Notifications),
 		WarnNotification: new(Notifications),
 	}
+	a.Text = s.RawText
 	procNotification := func(v string, ns *Notifications) {
 		if lookup := lookupNotificationRE.FindStringSubmatch(v); lookup != nil {
 			if ns.Lookups == nil {
@@ -875,10 +880,10 @@ func (c *Conf) loadNotification(s *parse.SectionNode) {
 		c.errorf("duplicate notification name: %s", name)
 	}
 	n := Notification{
-		Def:  s.RawText,
 		Vars: make(map[string]string),
 		Name: name,
 	}
+	n.Text = s.RawText
 	funcs := ttemplate.FuncMap{
 		"V": func(v string) string {
 			return c.Expand(v, n.Vars, false)
@@ -1081,13 +1086,13 @@ func (c *Conf) AlertTemplateStrings() (*AlertTemplateStrings, error) {
 			return nil, err
 		}
 		delete(incl, name)
-		templates[name] = template.Def
+		templates[name] = template.Text
 		for n := range incl {
 			t := c.Templates[n]
 			if t == nil {
 				continue
 			}
-			templates[name] += "\n\n" + t.Def
+			templates[name] += "\n\n" + t.Text
 		}
 	}
 	alerts := make(map[string]string)
@@ -1098,7 +1103,7 @@ func (c *Conf) AlertTemplateStrings() (*AlertTemplateStrings, error) {
 			for _, macro := range macros {
 				m := c.Macros[macro]
 				add(m.Macros)
-				alerts[name] += m.Def + "\n\n"
+				alerts[name] += m.Text + "\n\n"
 			}
 		}
 		lookups := make(map[string]bool)
@@ -1119,7 +1124,7 @@ func (c *Conf) AlertTemplateStrings() (*AlertTemplateStrings, error) {
 						if l == nil {
 							return
 						}
-						alerts[name] += l.Def + "\n\n"
+						alerts[name] += l.Text + "\n\n"
 					}
 				}
 			})
@@ -1130,7 +1135,7 @@ func (c *Conf) AlertTemplateStrings() (*AlertTemplateStrings, error) {
 					return
 				}
 				lookups[v.Name] = true
-				alerts[name] += v.Def + "\n\n"
+				alerts[name] += v.Text + "\n\n"
 			}
 		}
 		if alert.CritNotification != nil {
@@ -1146,7 +1151,7 @@ func (c *Conf) AlertTemplateStrings() (*AlertTemplateStrings, error) {
 		if alert.Warn != nil {
 			walk(alert.Warn.Tree.Root)
 		}
-		alerts[name] += alert.Def
+		alerts[name] += alert.Text
 		if alert.Template != nil {
 			t_associations[alert.Name] = alert.Template.Name
 		}
