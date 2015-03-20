@@ -279,11 +279,8 @@ func Rule(t miniprofiler.Timer, w http.ResponseWriter, r *http.Request) (interfa
 	if err != nil {
 		return nil, err
 	}
-	if len(c.Alerts) != 1 {
-		return nil, fmt.Errorf("exactly one alert must be defined")
-	}
 	var a *conf.Alert
-	// Set a to the first alert.
+	// Set a to the last alert.
 	for _, a = range c.Alerts {
 	}
 	ch := make(chan int)
