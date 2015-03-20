@@ -885,7 +885,7 @@ func (c *Conf) findAllDependencies(a *Alert) {
 		}
 		a.Dependencies = append(a.Dependencies, ci)
 	}
-	//Notifications and lookups are dependencies
+	// Notifications and lookups are dependencies
 	var walkNotifications = func(n *Notifications) {
 		for _, l := range n.Lookups {
 			addIfUnique(&l.ConfItem)
@@ -900,15 +900,15 @@ func (c *Conf) findAllDependencies(a *Alert) {
 	if a.WarnNotification != nil {
 		walkNotifications(a.WarnNotification)
 	}
-	//expressions may contain lookups or alerts
+	// Expressions may contain lookups or alerts
 
 	var walkExpr = func(n eparse.Node) {
 		eparse.Walk(n, func(n eparse.Node) {
 			switch n := n.(type) {
 			case *eparse.FuncNode:
-				//two things to look for in walking a tree.
-				//1. Lookup function
-				//2. Alert function
+				// Two things to look for in walking a tree.
+				// 1. Lookup function
+				// 2. Alert function
 				if n.Name == "lookup" && len(n.Args) > 0 {
 					name := n.Args[0].(*eparse.StringNode).Text
 					lookup := c.Lookups[name]
@@ -936,7 +936,7 @@ func (c *Conf) findAllDependencies(a *Alert) {
 
 func (c *ConfItem) textWithDependencies() string {
 	deps := []*ConfItem{}
-	//recursively walk the tree, appending all other dependencies.
+	// Recursively walk the tree, appending all other dependencies.
 	toCheck := []*ConfItem{}
 	for _, d := range c.Dependencies {
 		deps = append(deps, d)
@@ -954,7 +954,7 @@ func (c *ConfItem) textWithDependencies() string {
 	}
 	text := ""
 	printed := map[*ConfItem]bool{}
-	//print dependencies right to left.
+	// Print dependencies right to left.
 	for i := len(deps) - 1; i >= 0; i-- {
 		item := deps[i]
 		if !printed[item] {

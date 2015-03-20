@@ -278,7 +278,7 @@ func Rule(t miniprofiler.Timer, w http.ResponseWriter, r *http.Request) (interfa
 	}
 	var a *conf.Alert
 	// Set a to the last alert.
-	for _, a = range c.Alerts {
+	for _, a = range c.OrderedAlerts {
 	}
 	ch := make(chan int)
 	errch := make(chan error, intervals)
