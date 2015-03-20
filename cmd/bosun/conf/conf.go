@@ -877,13 +877,21 @@ func (c *Conf) loadAlert(s *parse.SectionNode) {
 }
 
 func (c *Conf) findAllDependencies(a *Alert) {
+	var addIfUnique = func(ci *ConfItem) {
+		for _, x := range a.Dependencies {
+			if x == ci {
+				return
+			}
+		}
+		a.Dependencies = append(a.Dependencies, ci)
+	}
 	//Notifications and lookups are dependencies
 	var walkNotifications = func(n *Notifications) {
 		for _, l := range n.Lookups {
-			a.Dependencies = append(a.Dependencies, &l.ConfItem)
+			addIfUnique(&l.ConfItem)
 		}
 		for _, not := range n.Notifications {
-			a.Dependencies = append(a.Dependencies, &not.ConfItem)
+			addIfUnique(&not.ConfItem)
 		}
 	}
 	if a.CritNotification != nil {
@@ -893,14 +901,7 @@ func (c *Conf) findAllDependencies(a *Alert) {
 		walkNotifications(a.WarnNotification)
 	}
 	//expressions may contain lookups or alerts
-	var addIfUnique = func(ci *ConfItem) {
-		for _, x := range a.Dependencies {
-			if x == ci {
-				return
-			}
-		}
-		a.Dependencies = append(a.Dependencies, ci)
-	}
+
 	var walkExpr = func(n eparse.Node) {
 		eparse.Walk(n, func(n eparse.Node) {
 			switch n := n.(type) {
@@ -955,7 +956,6 @@ func (c *ConfItem) textWithDependencies() string {
 	printed := map[*ConfItem]bool{}
 	//print dependencies right to left.
 	for i := len(deps) - 1; i >= 0; i-- {
-		fmt.Println(i, len(deps))
 		item := deps[i]
 		if !printed[item] {
 			printed[item] = true
